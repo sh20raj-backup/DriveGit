@@ -4,7 +4,7 @@
 
 DriveGit is an open-source, local-first CLI for snapshots and version history across ordinary folders: source code, notes, PDFs, images, documents, research data, and mixed assets.
 
-> **Current status: v0.1.0 development.** The local snapshot engine is being implemented. Google Drive push/pull is not implemented yet; do not treat this release as a remote backup.
+> **Current status: v0.1.0 development.** The local snapshot engine is implemented and covered by unit tests. Google Drive push/pull is not implemented yet; do not treat this release as a remote backup.
 
 ## First working slice
 
