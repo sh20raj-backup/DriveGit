@@ -13,7 +13,7 @@ Node.js 20 or newer is required.
 ```sh
 git clone https://github.com/SH20RAJ/DriveGit.git
 cd DriveGit
-npm install
+npm ci
 npm run build
 npm test
 npm link
