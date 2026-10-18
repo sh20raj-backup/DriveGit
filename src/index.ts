@@ -38,7 +38,7 @@ program.command('status')
     const print = (title: string, items: Array<{ path: string; kind: string }>) => {
       if (items.length) {
         console.log('\n' + title + ':');
-        for (const item of items) console.log('  ' + item.kind.padEnd(8) + item.path);
+        for (const item of items) console.log('  ' + item.kind.padEnd(10) + item.path);
       }
     };
     print('Changes staged for commit', result.staged);
