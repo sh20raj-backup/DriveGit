@@ -264,23 +264,20 @@ export async function stagePaths(startPath: string, inputs: string[], all = fals
   }
   if (!matchedAny) throw new Error('No trackable files or tracked paths matched. Check the path and .drivegitignore.');
   const next: Tree = all || targets.includes('') ? {} : { ...index };
-  let staged = 0;
-  let removed = 0;
   for (const [relative, file] of current) {
     if (!targets.some((target) => isWithin(relative, target))) continue;
     const stored = await storeBlob(repo, file.absolute);
     const entry = { hash: stored.hash, size: stored.size, mode: stored.mode };
-    if (!sameEntry(index[relative], entry)) staged++;
     next[relative] = entry;
   }
   const trackedPaths = new Set([...Object.keys(index), ...known]);
   for (const relative of trackedPaths) {
     if (!targets.some((target) => isWithin(relative, target))) continue;
-    if (!current.has(relative)) {
-      if (next[relative]) removed++;
-      delete next[relative];
-    }
+    if (!current.has(relative)) delete next[relative];
   }
+  const stagedChanges = changedPaths(index, next);
+  const staged = stagedChanges.filter((relative) => Boolean(next[relative])).length;
+  const removed = stagedChanges.filter((relative) => !next[relative]).length;
   await atomicWrite(path.join(repo.gitDir, 'index.json'), JSON.stringify(sortedTree(next), null, 2) + '\n');
   return { staged, removed };
 }
