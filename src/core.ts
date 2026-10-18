@@ -508,6 +508,60 @@ export async function restorePaths(startPath: string, revision: string, inputs: 
   }
   return { restored, removed };
 }
+export async function verifyRepository(startPath = process.cwd()): Promise<{ commits: number; trees: number; blobs: number }> {
+  const repo = await findRepository(startPath);
+  const index = await indexTree(repo);
+  const head = await headInfo(repo);
+  const roots = new Set<string>();
+  if (head.id) roots.add(head.id);
+
+  async function collectRefs(directory: string): Promise<void> {
+    if (!(await exists(directory))) return;
+    for (const item of await readdir(directory, { withFileTypes: true })) {
+      const absolute = path.join(directory, item.name);
+      if (item.isDirectory()) await collectRefs(absolute);
+      else if (item.isFile()) {
+        const id = (await readFile(absolute, 'utf8')).trim();
+        if (!id) continue;
+        if (!/^[a-f0-9]{64}$/.test(id)) throw new Error('Invalid reference in ' + absolute);
+        roots.add(id);
+      }
+    }
+  }
+  await collectRefs(path.join(repo.gitDir, 'refs', 'heads'));
+
+  const visitedCommits = new Set<string>();
+  const visitedTrees = new Set<string>();
+  const visitedBlobs = new Set<string>();
+  async function verifyBlob(entry: Entry): Promise<void> {
+    if (visitedBlobs.has(entry.hash)) return;
+    const file = objectPath(repo, 'blobs', entry.hash);
+    if (!(await exists(file))) throw new Error('Missing blob object: ' + entry.hash);
+    const info = await stat(file);
+    if (info.size !== entry.size || await hashFile(file) !== entry.hash) {
+      throw new Error('Blob integrity check failed: ' + entry.hash);
+    }
+    visitedBlobs.add(entry.hash);
+  }
+
+  for (const entry of Object.values(index)) await verifyBlob(entry);
+  const pending = [...roots];
+  while (pending.length) {
+    const id = pending.pop();
+    if (!id || visitedCommits.has(id)) continue;
+    const commit = await loadCommit(repo, id);
+    visitedCommits.add(id);
+    if (!/^[a-f0-9]{64}$/.test(commit.tree)) throw new Error('Invalid tree reference in commit ' + id);
+    const tree = await loadTree(repo, commit.tree);
+    visitedTrees.add(commit.tree);
+    for (const entry of Object.values(tree)) await verifyBlob(entry);
+    for (const parent of commit.parents) {
+      if (!/^[a-f0-9]{64}$/.test(parent)) throw new Error('Invalid parent reference in commit ' + id);
+      if (!visitedCommits.has(parent)) pending.push(parent);
+    }
+  }
+  return { commits: visitedCommits.size, trees: visitedTrees.size, blobs: visitedBlobs.size };
+}
 export async function setRepositoryConfig(startPath: string, key: string, value: string): Promise<void> {
   const repo = await findRepository(startPath);
   if (key !== 'user.name' && key !== 'user.email') throw new Error('Supported config keys: user.name, user.email');
