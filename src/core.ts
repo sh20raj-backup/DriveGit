@@ -104,7 +104,7 @@ async function loadTree(repo: Repo, id: string): Promise<Tree> {
   const raw = await readJson<Tree>(file);
   for (const [relative, entry] of Object.entries(raw)) {
     const segments = relative.split('/');
-    if (!relative || relative.startsWith('/') || relative.includes('\\\\') ||
+    if (!relative || relative.startsWith('/') || relative.includes('\\') ||
         segments.some((part) => !part || part === '.' || part === '..') ||
         relative === '.drivegit' || relative.startsWith('.drivegit/')) {
       throw new Error('Unsafe path in tree object: ' + relative);
