@@ -138,7 +138,11 @@ async function loadCommit(repo: Repo, id: string): Promise<Commit> {
 }
 async function readConfig(gitDir: string): Promise<Repo['config']> {
   const config = await readJson<Repo['config']>(path.join(gitDir, 'config.json'));
-  if (config.formatVersion !== FORMAT_VERSION) throw new Error('Unsupported repository format: ' + config.formatVersion);
+  if (!config || config.formatVersion !== FORMAT_VERSION) throw new Error('Unsupported repository format: ' + config?.formatVersion);
+  if (!config.user || typeof config.user.name !== 'string' || !config.user.name.trim() ||
+      typeof config.user.email !== 'string' || !config.user.email.trim()) {
+    throw new Error('Invalid repository config: user.name and user.email must be set.');
+  }
   return config;
 }
 export async function findRepository(startPath = process.cwd()): Promise<Repo> {
@@ -318,8 +322,9 @@ export async function createCommit(startPath: string, message: string): Promise<
   const before = await headTree(repo);
   if (changedPaths(before, index).length === 0) throw new Error('Nothing to commit. Stage changes with drivegit add first.');
   for (const entry of Object.values(index)) {
-    if (!(await exists(objectPath(repo, 'blobs', entry.hash))) || await hashFile(objectPath(repo, 'blobs', entry.hash)) !== entry.hash) {
-      throw new Error('Missing or corrupt blob: ' + entry.hash);
+    const blob = objectPath(repo, 'blobs', entry.hash);
+    if (!(await exists(blob)) || (await stat(blob)).size !== entry.size || await hashFile(blob) !== entry.hash) {
+      throw new Error('Missing, corrupt, or inconsistent blob: ' + entry.hash);
     }
   }
   const tree = await saveTree(repo, index);
@@ -515,9 +520,8 @@ export async function restorePaths(startPath: string, revision: string, inputs: 
         await rm(temporary, { force: true }).catch(() => undefined);
       }
       if (wanted.mode === 0o100755) {
-        const info = await stat(target);
         const fs = await import('node:fs/promises');
-        await fs.chmod(target, info.mode | 0o111);
+        await fs.chmod(target, wanted.mode === 0o100755 ? 0o755 : 0o644);
       }
       restored.push(relative);
     } else if (head[relative] && current) {
