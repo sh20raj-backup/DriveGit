@@ -11,7 +11,8 @@ import {
   setRepositoryConfig,
   showCommit,
   stagePaths,
-  statusRepository
+  statusRepository,
+  verifyRepository
 } from './core.js';
 
 const program = new Command();
@@ -129,14 +130,15 @@ program.command('config')
   });
 
 program.command('doctor')
-  .description('Check local repository metadata and object integrity')
+  .description('Verify repository metadata and all reachable object hashes')
   .action(async () => {
     const repo = await findRepository();
     const state = await statusRepository();
+    const verified = await verifyRepository();
     console.log('Repository: ' + repo.root);
     console.log('Format: ' + repo.config.formatVersion);
     console.log('Branch: ' + state.branch);
-    console.log('Local checks passed. Run tests before using this early release with important files.');
+    console.log('Verified ' + verified.commits + ' commit(s), ' + verified.trees + ' tree(s), and ' + verified.blobs + ' blob(s).');
   });
 
 program.command('push')
