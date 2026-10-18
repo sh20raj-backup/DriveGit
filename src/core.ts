@@ -451,8 +451,8 @@ export async function diffRepository(startPath = process.cwd(), staged = false):
     output.push('diff -- ' + relative);
     const oldEntry = base[relative];
     const newEntry = next[relative];
-    let before = Buffer.alloc(0);
-    let after = Buffer.alloc(0);
+    let before: Buffer = Buffer.alloc(0);
+    let after: Buffer = Buffer.alloc(0);
     if (oldEntry) before = await readBlob(repo, oldEntry);
     if (newEntry) {
       if (!staged && working?.get(relative)) after = await readFile(working.get(relative)!.absolute);
