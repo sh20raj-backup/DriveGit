@@ -41,6 +41,22 @@ function sortedTree(tree: Tree): Tree {
   }
   return result;
 }
+function validateTree(raw: Tree): Tree {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new Error('Invalid tree object.');
+  for (const [relative, entry] of Object.entries(raw)) {
+    const segments = relative.split('/');
+    if (!relative || relative.startsWith('/') || relative.includes('\\') ||
+        segments.some((part) => !part || part === '.' || part === '..') ||
+        relative === '.drivegit' || relative.startsWith('.drivegit/')) {
+      throw new Error('Unsafe path in tree/index object: ' + relative);
+    }
+    if (!entry || !/^[a-f0-9]{64}$/.test(entry.hash) || !Number.isSafeInteger(entry.size) ||
+        entry.size < 0 || (entry.mode !== 0o100644 && entry.mode !== 0o100755)) {
+      throw new Error('Invalid tree entry: ' + relative);
+    }
+  }
+  return sortedTree(raw);
+}
 function sameEntry(a: Entry | undefined, b: Entry | undefined): boolean {
   return a === undefined ? b === undefined : b !== undefined && a.hash === b.hash && a.mode === b.mode;
 }
@@ -101,20 +117,7 @@ async function saveTree(repo: Repo, tree: Tree): Promise<string> {
 async function loadTree(repo: Repo, id: string): Promise<Tree> {
   const file = objectPath(repo, 'trees', id);
   if (!(await exists(file))) throw new Error('Missing tree object ' + id);
-  const raw = await readJson<Tree>(file);
-  for (const [relative, entry] of Object.entries(raw)) {
-    const segments = relative.split('/');
-    if (!relative || relative.startsWith('/') || relative.includes('\\') ||
-        segments.some((part) => !part || part === '.' || part === '..') ||
-        relative === '.drivegit' || relative.startsWith('.drivegit/')) {
-      throw new Error('Unsafe path in tree object: ' + relative);
-    }
-    if (!entry || !/^[a-f0-9]{64}$/.test(entry.hash) || !Number.isSafeInteger(entry.size) ||
-        entry.size < 0 || (entry.mode !== 0o100644 && entry.mode !== 0o100755)) {
-      throw new Error('Invalid tree entry: ' + relative);
-    }
-  }
-  const parsed = sortedTree(raw);
+  const parsed = validateTree(await readJson<Tree>(file));
   if (digest(JSON.stringify(parsed)) !== id) throw new Error('Tree integrity check failed: ' + id);
   return parsed;
 }
@@ -184,8 +187,7 @@ async function headInfo(repo: Repo): Promise<{ branch: string; id: string | null
 }
 async function indexTree(repo: Repo): Promise<Tree> {
   const file = path.join(repo.gitDir, 'index.json');
-  const tree = await readJson<Tree>(file);
-  return sortedTree(tree);
+  return validateTree(await readJson<Tree>(file));
 }
 async function headTree(repo: Repo): Promise<Tree> {
   const head = await headInfo(repo);
@@ -458,6 +460,22 @@ export async function diffRepository(startPath = process.cwd(), staged = false):
   }
   return output.length ? output.join('\n') + '\n' : 'No differences.\n';
 }
+async function assertNoSymlinkParents(root: string, relative: string): Promise<void> {
+  const segments = relative.split('/');
+  let current = root;
+  for (let index = 0; index < segments.length - 1; index++) {
+    current = path.join(current, segments[index]!);
+    let info;
+    try {
+      info = await lstat(current);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') break;
+      throw error;
+    }
+    if (info.isSymbolicLink()) throw new Error('Refusing to restore through symlinked directory: ' + current);
+    if (!info.isDirectory()) throw new Error('Refusing to restore through a non-directory path: ' + current);
+  }
+}
 export async function restorePaths(startPath: string, revision: string, inputs: string[], force = false): Promise<{ restored: string[]; removed: string[] }> {
   const repo = await findRepository(startPath);
   if (inputs.length === 0) throw new Error('Specify one or more paths to restore.');
@@ -470,6 +488,7 @@ export async function restorePaths(startPath: string, revision: string, inputs: 
   const selected = [...allPaths].filter((relative) => targets.some((target) => isWithin(relative, target))).sort();
   if (selected.length === 0) throw new Error('No tracked paths matched those restore arguments.');
   for (const relative of selected) {
+    if (source[relative]) await assertNoSymlinkParents(repo.root, relative);
     const current = working.get(relative);
     const tracked = head[relative];
     const wanted = source[relative];
