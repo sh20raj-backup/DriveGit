@@ -60,8 +60,9 @@ project/
     index.json
     db.sqlite
     objects/
-      4a/
-        4a1f...              # immutable blob or metadata object
+      blobs/<sha256>          # raw immutable file bytes
+      trees/<sha256>.json     # canonical flat snapshot manifest
+      commits/<sha256>.json   # immutable commit metadata
     refs/heads/main
     refs/tags/
     refs/remotes/origin/main
@@ -85,7 +86,11 @@ A blob contains raw file bytes. Logical ID is `sha256(rawBytes)`, optionally pre
 
 ### Tree
 
-A tree describes a directory's direct children, sorted deterministically. Each entry contains name, kind (`file`, `directory`, optionally `symlink`), object/subtree ID, mode metadata, and size for files. Hash a canonical serialization with stable key order, UTF-8 and explicit mode/path rules. Do not concatenate paths ambiguously; use canonical JSON or length-prefixed encoding.
+**Current v0.1 format:** a tree is a canonical flat map from normalized repository-relative file paths to blob ID, byte size, and supported mode. The map is sorted by path and serialized as deterministic JSON before hashing. For example, `notes/plan.md` is one key, not a recursive directory entry. Empty directories are not represented and symlinks are skipped.
+
+This flat manifest keeps the first implementation easy to verify, but a very large repository repeats the full path map in every snapshot. A hierarchical directory-tree format can improve scale later, but it must use a new repository format version and migration tests. Do not silently reinterpret existing tree objects.
+
+For any future format, use canonical serialization with stable key order, UTF-8, and explicit path/mode rules. Never concatenate paths ambiguously.
 
 ### Commit
 
