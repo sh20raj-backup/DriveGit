@@ -101,7 +101,20 @@ async function saveTree(repo: Repo, tree: Tree): Promise<string> {
 async function loadTree(repo: Repo, id: string): Promise<Tree> {
   const file = objectPath(repo, 'trees', id);
   if (!(await exists(file))) throw new Error('Missing tree object ' + id);
-  const parsed = sortedTree(await readJson<Tree>(file));
+  const raw = await readJson<Tree>(file);
+  for (const [relative, entry] of Object.entries(raw)) {
+    const segments = relative.split('/');
+    if (!relative || relative.startsWith('/') || relative.includes('\\\\') ||
+        segments.some((part) => !part || part === '.' || part === '..') ||
+        relative === '.drivegit' || relative.startsWith('.drivegit/')) {
+      throw new Error('Unsafe path in tree object: ' + relative);
+    }
+    if (!entry || !/^[a-f0-9]{64}$/.test(entry.hash) || !Number.isSafeInteger(entry.size) ||
+        entry.size < 0 || (entry.mode !== 0o100644 && entry.mode !== 0o100755)) {
+      throw new Error('Invalid tree entry: ' + relative);
+    }
+  }
+  const parsed = sortedTree(raw);
   if (digest(JSON.stringify(parsed)) !== id) throw new Error('Tree integrity check failed: ' + id);
   return parsed;
 }
@@ -141,7 +154,7 @@ export async function initRepository(rootPath = process.cwd(), branch = 'main'):
   const root = path.resolve(rootPath);
   const gitDir = path.join(root, '.drivegit');
   if (await exists(gitDir)) throw new Error('A .drivegit directory already exists here.');
-  if (!/^[A-Za-z0-9._/-]+$/.test(branch) || branch.startsWith('/') || branch.includes('..') || branch.endsWith('/')) {
+  if (!/^[A-Za-z0-9._-]+$/.test(branch) || branch === '.' || branch === '..' || branch.includes('..')) {
     throw new Error('Invalid branch name: ' + branch);
   }
   await mkdir(root, { recursive: true });
