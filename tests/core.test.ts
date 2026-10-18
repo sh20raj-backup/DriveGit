@@ -71,6 +71,18 @@ describe('local snapshot engine', () => {
     expect(await diffRepository(root)).toContain('+three');
   });
 
+  it('stages tracked deletions with add -A', async () => {
+    const root = await fixture();
+    await initRepository(root);
+    await writeFile(path.join(root, 'remove-me.txt'), 'tracked\\n');
+    await stagePaths(root, ['remove-me.txt']);
+    await createCommit(root, 'Track file');
+    await rm(path.join(root, 'remove-me.txt'));
+    const result = await stagePaths(root, [], true);
+    expect(result.removed).toBe(1);
+    expect((await statusRepository(root)).staged).toEqual([{ path: 'remove-me.txt', kind: 'deleted' }]);
+  });
+
   it('verifies reachable objects and detects corrupted blobs', async () => {
     const root = await fixture();
     await initRepository(root);
