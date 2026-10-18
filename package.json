@@ -8,7 +8,7 @@
   "bin": { "drivegit": "./dist/index.js" },
   "files": ["dist", "README.md", "docs"],
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json && node scripts/postbuild.mjs",
     "dev": "tsx src/index.ts",
     "test": "vitest run",
     "test:watch": "vitest",
