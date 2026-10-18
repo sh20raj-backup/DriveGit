@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { createCommit, diffRepository, initRepository, listLog, restorePaths, stagePaths, statusRepository } from '../src/core.js';
@@ -77,7 +77,11 @@ describe('local snapshot engine', () => {
     await mkdir(path.join(root, 'cache'), { recursive: true });
     await writeFile(path.join(root, '.drivegitignore'), 'cache/\n');
     await writeFile(path.join(root, 'cache', 'ignored.txt'), 'ignored');
+    await writeFile(path.join(root, 'target.txt'), 'target');
+    await symlink('target.txt', path.join(root, 'alias.txt'));
     await stagePaths(root, [], true);
-    expect((await statusRepository(root)).untracked).not.toContain('cache/ignored.txt');
+    const status = await statusRepository(root);
+    expect(status.untracked).not.toContain('cache/ignored.txt');
+    expect(status.untracked).not.toContain('alias.txt');
   });
 });
