@@ -83,6 +83,20 @@ describe('local snapshot engine', () => {
     await expect(verifyRepository(root)).rejects.toThrow('Blob integrity check failed');
   });
 
+  it('refuses to restore through a symlinked parent directory', async () => {
+    const root = await fixture();
+    const outside = await mkdtemp(path.join(os.tmpdir(), 'drivegit-outside-'));
+    roots.push(outside);
+    await initRepository(root);
+    await mkdir(path.join(root, 'linkdir'), { recursive: true });
+    await writeFile(path.join(root, 'linkdir', 'file.txt'), 'inside repository\\n');
+    await stagePaths(root, ['linkdir']);
+    const commit = await createCommit(root, 'Track nested file');
+    await rm(path.join(root, 'linkdir'), { recursive: true, force: true });
+    await symlink(outside, path.join(root, 'linkdir'));
+    await expect(restorePaths(root, commit.id, ['linkdir'])).rejects.toThrow('symlinked directory');
+  });
+
   it('does not follow symlinks or stage ignored paths', async () => {
     const root = await fixture();
     await initRepository(root);
