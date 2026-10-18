@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { createCommit, diffRepository, initRepository, listLog, restorePaths, stagePaths, statusRepository } from '../src/core.js';
+import { createCommit, diffRepository, initRepository, listLog, restorePaths, stagePaths, statusRepository, verifyRepository } from '../src/core.js';
 
 const roots: string[] = [];
 async function fixture(): Promise<string> {
@@ -69,6 +69,18 @@ describe('local snapshot engine', () => {
     expect(status.staged.some((item) => item.path === 'a.txt')).toBe(true);
     expect(status.unstaged.some((item) => item.path === 'a.txt')).toBe(true);
     expect(await diffRepository(root)).toContain('+three');
+  });
+
+  it('verifies reachable objects and detects corrupted blobs', async () => {
+    const root = await fixture();
+    await initRepository(root);
+    await writeFile(path.join(root, 'notes.txt'), 'integrity matters\\n');
+    await stagePaths(root, ['notes.txt']);
+    const commit = await createCommit(root, 'Integrity fixture');
+    expect(await verifyRepository(root)).toEqual({ commits: 1, trees: 1, blobs: 1 });
+    const tree = JSON.parse(await readFile(path.join(root, '.drivegit', 'objects', 'trees', commit.commit.tree + '.json'), 'utf8')) as Record<string, { hash: string }>;
+    await writeFile(path.join(root, '.drivegit', 'objects', 'blobs', tree['notes.txt']!.hash), 'tampered');
+    await expect(verifyRepository(root)).rejects.toThrow('Blob integrity check failed');
   });
 
   it('does not follow symlinks or stage ignored paths', async () => {
