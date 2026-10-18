@@ -6,7 +6,6 @@ import {
   findRepository,
   initRepository,
   listLog,
-  resolveRevision,
   restorePaths,
   setRepositoryConfig,
   showCommit,
